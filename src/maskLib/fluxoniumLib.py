@@ -477,10 +477,15 @@ def create_test_grid(chip, no_column, no_row, x_var, y_var, x_key, y_key, ja_len
                     gnd_width = lead_length*2 + (gap_width[row][i] + window_width[row][i]) * arraylength - window_width[row][i]
 
             elif test_smallJ:
-                gnd_width = lead_length*2 + 0.5 + 1.36 + 0.14
+                # 0.5 = LL taper length
+                # 1.36 = LL finger length
+                gnd_width = lead_length*2 + 0.5 + 1.36 + gap_width[row][i]
 
             elif arb_struct:
-                gnd_width = lead_length*2 + 0.5 + 1.36 + 0.14 # temp, need to change
+                # 0.5 = LL taper length
+                # 1.36 = LL finger length
+                gnd_width = lead_length*2 + 0.5 + 1.36 + gap_width[row][i]
+                # TODO: update gnd_width to fit for arbitrary structure
 
             if not M1_pads:
                 position = (-(lead_length)*(2-4/5)/2, -40)
@@ -821,12 +826,12 @@ class StandardTestChip(TestChip):
         elif test_index in [7, 8]:
             # JJ_gap, JJ_len
             self.x_key = 'gap'
-            self.x_low_default = 0.10
-            self.x_high_default = 0.68
+            self.x_low_default = 0.05
+            self.x_high_default = 0.32
 
             self.y_key = 'len'
             self.y_low_default = 0.10
-            self.y_high_default = 0.84
+            self.y_high_default = 0.50
     
     def save_dose_table(self, doseJ_range, doseU_range, chipID, dose_J_default,
                         dose_U_default, PEC_factor=0.25, jgrid_skip=1, ugrid_skip=1, save_klayout_rename=True,
