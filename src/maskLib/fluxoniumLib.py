@@ -337,7 +337,7 @@ def create_test_grid(chip, no_column, no_row, x_var, y_var, x_key, y_key, ja_len
                      dose_Jlayer_row, dose_Ulayer_column, pad_w, pad_s,
                      ptDensity, pad_l, lead_length, cpw_s, doseU, doseJ, jgrid_skip=1, ugrid_skip=1,
                      do_e_beam_label= True, arb_struct=False, arb_path=None, arb_ulayer=None,
-                     arb_jlayer=None,**kwargs):
+                     arb_jlayer=None, do_bandage=True, **kwargs):
 
     if M1_pads:
         row_sep = 490
@@ -367,6 +367,12 @@ def create_test_grid(chip, no_column, no_row, x_var, y_var, x_key, y_key, ja_len
             chip.wafer.addLayer(ulayer[i],150)
     else:
         ulayer = ['60_SE1_JJ'] * no_row
+
+    if do_bandage:
+        bandage_ulayer = '699_JJ_bandage_Ucut'
+        bandage_jlayer = '299_JJ_bandage_Jcut'
+        chip.wafer.addLayer(bandage_ulayer, 255)
+        chip.wafer.addLayer(bandage_jlayer, 1)
 
     for row in range(no_row):
 
@@ -404,6 +410,8 @@ def create_test_grid(chip, no_column, no_row, x_var, y_var, x_key, y_key, ja_len
                 s_test_gnd = s_test.clone()
                 s_test.translatePos((-lead_length, 0))
                 s_test_ubridge = s_test.clone()
+                s_bandage = s_test.clone()
+
 
                 mw.Strip_taper(chip, s_test, length=lead_length, w0 = pad_w/10, w1 = lead, layer = jlayer[i])
                 mw.Strip_straight(chip, s_test, length=lead_length, w = lead, layer = jlayer[i])
@@ -413,6 +421,16 @@ def create_test_grid(chip, no_column, no_row, x_var, y_var, x_key, y_key, ja_len
                     mw.Strip_straight(chip, s_test_ubridge, length=ubridge_width[row][i], w = pad_w/10+2*ubridge_width[row][i], layer = ulayer[row])
                     mw.CPW_taper(chip, s_test_ubridge, length=lead_length, w0 = pad_w/10, w1 = lead, s0 = ubridge_width[row][i], s1 = ubridge_width[row][i], layer = ulayer[row])
                     mw.CPW_straight(chip, s_test_ubridge, w = lead, s = ubridge_width[row][i], length = lead_length, layer = ulayer[row])
+            
+                if do_bandage:
+                    s_bandage.translatePos((-lead_length/2-ubridge_width[row][i], 0))
+                    mw.Strip_straight(chip, s_bandage, length=ubridge_width[row][i], w = pad_w/5+2*ubridge_width[row][i], s = cpw_s, layer = bandage_ulayer)
+                    mw.Strip_straight(chip, s_bandage, length=lead_length, w = pad_w/5, s = cpw_s, layer = bandage_jlayer)
+                    s_bandage.translatePos((-lead_length, 0))
+                    mw.CPW_straight(chip, s_bandage, w = pad_w/5, s = ubridge_width[row][i], length = lead_length, layer = bandage_ulayer)
+                    mw.Strip_straight(chip, s_bandage, length=ubridge_width[row][i], w = pad_w/5+2*ubridge_width[row][i], s = cpw_s, layer = bandage_ulayer)
+
+            
             elif not arb_struct:
                 s_test_ubridge = s_test.clone()
 
@@ -450,6 +468,7 @@ def create_test_grid(chip, no_column, no_row, x_var, y_var, x_key, y_key, ja_len
                 add_imported_polyLine(chip, start=(x, y), file_name=arb_path, rename_dict={arb_jlayer: jlayer[i], arb_ulayer: ulayer[row]}, scale=1.0)
 
             s_test_ubridge = s_test.clone()
+            s_bandage = s_test.clone()
 
             # Right pad
             if M1_pads:
@@ -467,7 +486,15 @@ def create_test_grid(chip, no_column, no_row, x_var, y_var, x_key, y_key, ja_len
                 mw.CPW_straight(chip, s_test, w = pad_w, s = pad_s, length = pad_l, ptDensity = ptDensity)
             
                 mw.CPW_stub_round(chip, s_test, w = pad_w, s = pad_s, ptDensity = ptDensity, flipped = False)
-    
+
+                if do_bandage:
+                    s_bandage.translatePos((lead_length/2-ubridge_width[row][i]+lead_length, 0))
+                    mw.Strip_straight(chip, s_bandage, length=ubridge_width[row][i], w = pad_w/5+2*ubridge_width[row][i], s = cpw_s, layer = bandage_ulayer)
+                    mw.Strip_straight(chip, s_bandage, length=lead_length, w = pad_w/5, s = cpw_s, layer = bandage_jlayer)
+                    s_bandage.translatePos((-lead_length, 0))
+                    mw.CPW_straight(chip, s_bandage, w = pad_w/5, s = ubridge_width[row][i], length = lead_length, layer = bandage_ulayer)
+                    mw.Strip_straight(chip, s_bandage, length=ubridge_width[row][i], w = pad_w/5+2*ubridge_width[row][i], s = cpw_s, layer = bandage_ulayer)
+
             elif not arb_struct:
                 if ulayer_edge:
                     s_test_ubridge = s_test.clone()
@@ -878,6 +905,10 @@ class StandardTestChip(TestChip):
             f.write(f'20_SE1, {dose_J_default}\n')
             f.write(f'60_SE1_JJ, {dose_U_default / PEC_factor}\n')
 
+            # assign bandage layers to default values
+            f.write(f'299_JJ_bandage_Jcut, {dose_J_default}\n')
+            f.write(f'699_JJ_bandage_Ucut, {dose_U_default / PEC_factor}\n')
+
             # accounts for klayout renaming dose layers
             if save_klayout_rename:
                 for i, doseJ in enumerate(doseJ_range):
@@ -886,9 +917,9 @@ class StandardTestChip(TestChip):
                     updated_doseU = doseU / PEC_factor # PEC factor as we assign PEC in BEAMER
                     f.write(f'L6{j*ugrid_skip:02}D0_SE1_JJ_dose_{j*ugrid_skip:02}_{round(doseU)}_uC, {updated_doseU}\n')
                 
-                # assign 20_SE1' and '60_SE1_JJ' to default values:
-                f.write(f'L20D0_SE1, {dose_J_default}\n')
-                f.write(f'L60D0_SE1_JJ, {dose_U_default / PEC_factor}\n')
+                # assign bandage layers to default values
+                f.write(f'L299D0_JJ_bandage_Jcut, {dose_J_default}\n')
+                f.write(f'L699D0_JJ_bandage_Ucut, {dose_U_default / PEC_factor}\n')
 
         if print_file_location:
             print(f"Dose table saved to: {cwd}\\dose_table_{chipID}_{date}.txt")
