@@ -195,6 +195,11 @@ def smallJ(chip, structure, start, j_length, Jlayer, Ulayer, gap=0.14, lead = 1,
     mw.CPW_taper(chip, undercut, length=0.5, w1 = j_length, w0 = lead, s0 = ubridge_width, s1 = ubridge_width, layer = Ulayer)
     mw.CPW_straight(chip, undercut, w = j_length, s = ubridge_width, length = finger_length, layer = Ulayer)
 
+    # do second undercut near bridge
+    if gap < ubridge_width:
+        undercut.translatePos((-(ubridge_width-gap), 0), angle=0)
+        mw.CPW_straight(chip, undercut, w = j_length+2*ubridge_width, s = (lead - j_length)/2, length = (ubridge_width-gap), layer = Ulayer)
+
 # checker_board for resolution tests
 def checker_board(chip, structure, start, num, square_size, layer=None):
     x, y = start
@@ -404,6 +409,8 @@ def create_test_grid(chip, no_column, no_row, x_var, y_var, x_key, y_key, ja_len
                 mw.Strip_straight(chip, s_test, length=lead_length, w = lead, layer = jlayer[i])
                 
                 if ulayer_edge:
+                    s_test_ubridge.translatePos((-ubridge_width[row][i], 0))
+                    mw.Strip_straight(chip, s_test_ubridge, length=ubridge_width[row][i], w = pad_w/10+2*ubridge_width[row][i], layer = ulayer[row])
                     mw.CPW_taper(chip, s_test_ubridge, length=lead_length, w0 = pad_w/10, w1 = lead, s0 = ubridge_width[row][i], s1 = ubridge_width[row][i], layer = ulayer[row])
                     mw.CPW_straight(chip, s_test_ubridge, w = lead, s = ubridge_width[row][i], length = lead_length, layer = ulayer[row])
             elif not arb_struct:
@@ -413,6 +420,8 @@ def create_test_grid(chip, no_column, no_row, x_var, y_var, x_key, y_key, ja_len
                 mw.Strip_straight(chip, s_test, length=lead_length/5, w = lead, layer = jlayer[i])
 
                 if ulayer_edge:
+                    s_test_ubridge.translatePos((-ubridge_width[row][i], 0))
+                    mw.Strip_straight(chip, s_test_ubridge, length=ubridge_width[row][i], w = pad_w/10+2*ubridge_width[row][i], layer = ulayer[row])
                     mw.CPW_taper(chip, s_test_ubridge, length=lead_length/5, w0 = pad_w/10, w1 = lead, s0 = ubridge_width[row][i], s1 = ubridge_width[row][i], layer = ulayer[row])
                     mw.CPW_straight(chip, s_test_ubridge, w = lead, s = ubridge_width[row][i], length = lead_length/5, layer = ulayer[row])
 
@@ -447,6 +456,7 @@ def create_test_grid(chip, no_column, no_row, x_var, y_var, x_key, y_key, ja_len
                 if ulayer_edge:
                     mw.CPW_straight(chip, s_test_ubridge, w = lead, s = ubridge_width[row][i], length = lead_length, layer = ulayer[row])
                     mw.CPW_taper(chip, s_test_ubridge, length=lead_length, w1 = pad_w/10, w0 = lead, s0 = ubridge_width[row][i], s1 = ubridge_width[row][i], layer = ulayer[row])
+                    mw.Strip_straight(chip, s_test_ubridge, length=ubridge_width[row][i], w = pad_w/10+2*ubridge_width[row][i], layer = ulayer[row])
 
                 mw.Strip_straight(chip, s_test, length=lead_length, w = lead, s = cpw_s, layer = jlayer[i])
                 mw.Strip_taper(chip, s_test, length=lead_length, w1 = pad_w/10, w0 = lead, layer = jlayer[i])
@@ -463,6 +473,7 @@ def create_test_grid(chip, no_column, no_row, x_var, y_var, x_key, y_key, ja_len
                     s_test_ubridge = s_test.clone()
                     mw.CPW_straight(chip, s_test_ubridge, w = lead, s = ubridge_width[row][i], length = lead_length/5, layer = ulayer[row])
                     mw.CPW_taper(chip, s_test_ubridge, length=lead_length/5, w1 = pad_w/10, w0 = lead, s0 = ubridge_width[row][i], s1 = ubridge_width[row][i], layer = ulayer[row])
+                    mw.Strip_straight(chip, s_test_ubridge, length=ubridge_width[row][i], w = pad_w/10+2*ubridge_width[row][i], layer = ulayer[row])
 
                 mw.Strip_straight(chip, s_test, length=lead_length/5, w = lead, s = cpw_s, layer = jlayer[i])
                 mw.Strip_taper(chip, s_test, length=lead_length/5, w1 = pad_w/10, w0 = lead, layer = jlayer[i])
