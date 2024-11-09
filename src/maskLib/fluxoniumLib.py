@@ -337,7 +337,7 @@ def create_test_grid(chip, no_column, no_row, x_var, y_var, x_key, y_key, ja_len
                      dose_Jlayer_row, dose_Ulayer_column, pad_w, pad_s,
                      ptDensity, pad_l, lead_length, cpw_s, doseU, doseJ, jgrid_skip=1, ugrid_skip=1,
                      do_e_beam_label= True, arb_struct=False, arb_path=None, arb_ulayer=None,
-                     arb_jlayer=None, do_bandage=True, **kwargs):
+                     arb_jlayer=None, do_bandage=True, arb_gnd_width=None, **kwargs):
 
     if M1_pads:
         row_sep = 490
@@ -526,8 +526,7 @@ def create_test_grid(chip, no_column, no_row, x_var, y_var, x_key, y_key, ja_len
             elif arb_struct:
                 # 0.5 = LL taper length
                 # 1.36 = LL finger length
-                gnd_width = lead_length*2 + 0.5 + 1.36 + gap_width[row][i]
-                # TODO: update gnd_width to fit for arbitrary structure
+                gnd_width = arb_gnd_width
 
             if not M1_pads:
                 position = (-(lead_length)*(2-4/5)/2, -40)
@@ -687,7 +686,11 @@ def add_imported_polyLine(chip, start, file_name, scale=1.0, rename_dict=None):
         pts = [vmul_scalar(pt, scale) for pt in pts]
         # shift points to start
         pts = [vadd(start, pt) for pt in pts]
-        pts.append(pts[0])
+        try:
+            pts.append(pts[0])
+        except:
+            #print(f'No points in POLYLINE, skipping')
+            continue
         poly = dxf.polyline(
             points=pts,
             color=entity.dxf.color,
