@@ -775,7 +775,7 @@ class StandardTestChip(TestChip):
             params[1]['test_JA'] = True
             params[1]['start_grid_y'] = 3500
 
-            self.save_dose_table(x_swept, y_swept, self.chipID, default_params['dose_J'], default_params['dose_U'])
+            self.save_dose_table(x_swept, y_swept, self.chipID, default_params['dose_J'], default_params['dose_U'], PEC_factor=params[0]['PEC_factor'])
         elif test_index == 1:
             params[0]['dose_Jlayer_row'] = True
             params[0]['dose_Ulayer_column'] = True
@@ -784,7 +784,7 @@ class StandardTestChip(TestChip):
             params[0]['doseU'] = y_var
             params[0]['jgrid_skip'] = 5
 
-            self.save_dose_table(x_swept, y_swept, self.chipID, default_params['dose_J'], default_params['dose_U'], jgrid_skip=5)
+            self.save_dose_table(x_swept, y_swept, self.chipID, default_params['dose_J'], default_params['dose_U'], jgrid_skip=5, PEC_factor=params[0]['PEC_factor'])
         elif test_index == 2:
             params[0]['dose_Jlayer_row'] = True
             params[0]['dose_Ulayer_column'] = True
@@ -793,7 +793,7 @@ class StandardTestChip(TestChip):
             params[0]['doseU'] = y_var
             params[0]['jgrid_skip'] = 5
 
-            self.save_dose_table(x_swept, y_swept, self.chipID, default_params['dose_J'], default_params['dose_U'], jgrid_skip=5)
+            self.save_dose_table(x_swept, y_swept, self.chipID, default_params['dose_J'], default_params['dose_U'], jgrid_skip=5, PEC_factor=params[0]['PEC_factor'])
         elif test_index in [3, 4]:
             params[0]['test_JA'] = True
             params[0]['gap_width'] = x_var
@@ -974,6 +974,7 @@ class StandardTestChip(TestChip):
             'ptDensity': default_params['ptDensity'],
             'lead_length': default_params['lead_length'],
             'cpw_s': default_params['cpw_s'],
+            'PEC_factor': default_params['PEC_factor']
         }
 
         return params
