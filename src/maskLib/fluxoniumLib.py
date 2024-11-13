@@ -332,7 +332,7 @@ def create_clover_leaf_checkerboard(chip, loc, jlayer='20_SE1', M1_layer="5_M1",
         AlphaNumStr(chip, label_struct, f'{jlayer}', size=text_size)
 
 def create_test_grid(chip, no_column, no_row, x_var, y_var, x_key, y_key, ja_length, j_length,
-                     gap_width, window_width, ubridge_width, no_gap, start_grid_x,
+                     gap_width_ja, gap_width_j, window_width, ubridge_width, no_gap, start_grid_x,
                      start_grid_y, M1_pads, ulayer_edge, test_JA, test_smallJ,
                      dose_Jlayer_row, dose_Ulayer_column, pad_w, pad_s,
                      ptDensity, pad_l, lead_length, cpw_s, doseU, doseJ, jgrid_skip=1, ugrid_skip=1,
@@ -457,11 +457,11 @@ def create_test_grid(chip, no_column, no_row, x_var, y_var, x_key, y_key, ja_len
 
 
             if test_JA:
-                junction_chain(chip, s_test, n_junc_array=no_gap, w=window_width[row][i], s=lead, gap=gap_width[row][i], CW = True, finalpiece = False, Jlayer = jlayer[i], Ulayer=ulayer[row])
+                junction_chain(chip, s_test, n_junc_array=no_gap, w=window_width[row][i], s=lead, gap=gap_width_ja[row][i], CW = True, finalpiece = False, Jlayer = jlayer[i], Ulayer=ulayer[row])
 
             elif test_smallJ:
                 x, y = s_test.getPos((0, +lead/2))
-                smallJ(chip, s_test, (x, y), j_length[row][i], Jlayer = jlayer[i], Ulayer = ulayer[row], lead = lead, gap=gap_width[row][i])
+                smallJ(chip, s_test, (x, y), j_length[row][i], Jlayer = jlayer[i], Ulayer = ulayer[row], lead = lead, gap=gap_width_j[row][i])
             
             elif arb_struct:
                 x, y = s_test.getPos((0, 0))
@@ -509,19 +509,19 @@ def create_test_grid(chip, no_column, no_row, x_var, y_var, x_key, y_key, ja_len
             if test_JA:
 
                 if len(no_gap) <= 1:
-                    gnd_width = lead_length*2 + (gap_width[row][i] + window_width[row][i]) * no_gap[0] - window_width[row][i]
+                    gnd_width = lead_length*2 + (gap_width_ja[row][i] + window_width[row][i]) * no_gap[0] - window_width[row][i]
 
                 elif len(no_gap) >= 2:
                     arraylength = 0
                     for j in range(len(no_gap)):
                         arraylength += (-1)**j*no_gap[j]
 
-                    gnd_width = lead_length*2 + (gap_width[row][i] + window_width[row][i]) * arraylength - window_width[row][i]
+                    gnd_width = lead_length*2 + (gap_width_ja[row][i] + window_width[row][i]) * arraylength - window_width[row][i]
 
             elif test_smallJ:
                 # 0.5 = LL taper length
                 # 1.36 = LL finger length
-                gnd_width = lead_length*2 + 0.5 + 1.36 + gap_width[row][i]
+                gnd_width = lead_length*2 + 0.5 + 1.36 + gap_width_j[row][i]
 
             elif arb_struct:
                 # 0.5 = LL taper length
@@ -796,15 +796,15 @@ class StandardTestChip(TestChip):
             self.save_dose_table(x_swept, y_swept, self.chipID, default_params['dose_J'], default_params['dose_U'], jgrid_skip=5, PEC_factor=params[0]['PEC_factor'])
         elif test_index in [3, 4]:
             params[0]['test_JA'] = True
-            params[0]['gap_width'] = x_var
+            params[0]['gap_width_ja'] = x_var
             params[0]['ja_length'] = y_var
         elif test_index in [5, 6]:
             params[0]['test_JA'] = True
-            params[0]['gap_width'] = x_var
+            params[0]['gap_width_ja'] = x_var
             params[0]['window_width'] = y_var
         elif test_index in [7, 8]:
             params[0]['test_smallJ'] = True
-            params[0]['gap_width'] = x_var
+            params[0]['gap_width_j'] = x_var
             params[0]['j_length'] = y_var
 
         if not do_only_params:
@@ -939,7 +939,8 @@ class StandardTestChip(TestChip):
         window_width = grid_from_entry(default_params['window_width'], no_row, no_column)
         ja_length = grid_from_entry(default_params['ja_length'], no_row, no_column)
         j_length = grid_from_entry(default_params['j_length'], no_row, no_column)
-        gap_width = grid_from_entry(default_params['gap_width'], no_row, no_column)
+        gap_width_ja = grid_from_entry(default_params['gap_width_ja'], no_row, no_column)
+        gap_width_j = grid_from_entry(default_params['gap_width_j'], no_row, no_column)
         
         params = {
             'M1_pads': False,   # Probe pads? No -> tigher packing
@@ -960,7 +961,8 @@ class StandardTestChip(TestChip):
             
             'ja_length': ja_length,
             'j_length': j_length,
-            'gap_width': gap_width,
+            'gap_width_ja': gap_width_ja,
+            'gap_width_j': gap_width_j,
             'window_width': window_width,
             'ubridge_width': ubridge_width,
             'doseJ': doseJ,
