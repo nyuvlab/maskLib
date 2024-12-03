@@ -398,7 +398,8 @@ def create_test_grid(chip, no_column, no_row, x_var, y_var, x_key, y_key, ja_len
             if test_JA:
                 lead = ja_length[row][i]
             elif test_smallJ:
-                lead = j_length[row][i]+1
+                # lead = j_length[row][i]+0.3
+                lead = 0.6 # set equal to a constant for even resistivity. Small enough for bandaging
 
             # Left pad
             if M1_pads:
