@@ -462,7 +462,7 @@ def create_test_grid(chip, no_column, no_row, x_var, y_var, x_key, y_key, ja_len
 
             elif test_smallJ:
                 x, y = s_test.getPos((0, +lead/2))
-                smallJ(chip, s_test, (x, y), j_length[row][i], Jlayer = jlayer[i], Ulayer = ulayer[row], lead = lead, gap=gap_width_j[row][i])
+                smallJ(chip, s_test, (x, y), j_length[row][i], Jlayer = jlayer[i], Ulayer = ulayer[row], lead = lead, gap=gap_width_j[row][i], ubridge_width=ubridge_width[row][i])
             
             elif arb_struct:
                 x, y = s_test.getPos((0, 0))
@@ -857,7 +857,7 @@ class StandardTestChip(TestChip):
 
             self.y_key = 'len'
             self.y_low_default = 1.0
-            self.y_high_default = 8.0
+            self.y_high_default = 6.0
             
         elif test_index in [5, 6]:
             # window_gap, window_width
