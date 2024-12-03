@@ -600,6 +600,22 @@ class Fluxonium4inWafer(m.Wafer):
             doMirrored(MarkerSquare, self, pt, 80,layer='EBEAM_MARK')
             doMirrored(MarkerSquare, self, pt, 80,layer='5_M1')
 
+    # chip labels in specified location on wafer
+    def add_chip_labels(self, loc=(100,100), height=600, layer='MARKERS'):
+        """
+        Add chip labels to all chips on wafer at specified location
+        WARNING: Text
+
+        Args:
+            loc (tuple): location of chip labels
+            height (int): height of chip labels
+            layer (str): layer of chip labels
+        """
+        for i in range(len(self.chips)):
+            #identifying marks
+            self.add(dxf.text(str(i),vadd(self.chipPts[i],loc),height=height,layer=layer))
+
+
 class ImportedChip(m.Chip):
     def __init__(self,wafer,chipID,layer,file_name,rename_dict=None,
                  chipWidth=6800, chipHeight=6800, surpress_warnings=False,
