@@ -397,6 +397,7 @@ def create_test_grid(chip, no_column, no_row, x_var, y_var, x_key, y_key, ja_len
             
             if test_JA:
                 lead = ja_length[row][i]
+                
             elif test_smallJ:
                 # lead = j_length[row][i]+0.3
                 lead = 0.6 # set equal to a constant for even resistivity. Small enough for bandaging
@@ -852,8 +853,8 @@ class StandardTestChip(TestChip):
         elif test_index in [3, 4]:
             # bridge_gap, bridge_len
             self.x_key = 'gap'
-            self.x_low_default = 0.10
-            self.x_high_default = 0.68
+            self.x_low_default = 0.00
+            self.x_high_default = 0.32
 
             self.y_key = 'len'
             self.y_low_default = 1.0
