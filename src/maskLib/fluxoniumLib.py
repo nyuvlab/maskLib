@@ -20,6 +20,8 @@ from dxfwrite.entities import Polyline
 import ezdxf
 import datetime
 
+from pya import Layout
+
 import maskLib.MaskLib as m
 import maskLib.microwaveLib as mw
 from maskLib.utilities import curveAB
@@ -51,11 +53,15 @@ def round_sf(value, n):
         value (float): value to round
         n (int): number of significant figures
     """
-    rounded_val = round(value, -int(np.floor(np.log10(abs(value)))) + (n - 1))
-    # if rounded_val has >= n digits to the left of the decimal point, return int
-    if len(str(rounded_val).split('.')[0]) >= n:
-        rounded_val = int(rounded_val)
-    return rounded_val
+    try:
+        rounded_val = round(value, -int(np.floor(np.log10(abs(value)))) + (n - 1))
+        # if rounded_val has >= n digits to the left of the decimal point, return int
+        if len(str(rounded_val).split('.')[0]) >= n:
+            rounded_val = int(rounded_val)
+        return rounded_val
+    except:
+        return value
+
 
 def grid_from_row(row, no_row):
     return [row for _ in range(no_row)]
@@ -191,6 +197,11 @@ def smallJ(chip, structure, start, j_length, Jlayer, Ulayer, gap=0.14, lead = 1,
     mw.CPW_taper(chip, undercut, length=0.5, w1 = j_length, w0 = lead, s0 = ubridge_width, s1 = ubridge_width, layer = Ulayer)
     mw.CPW_straight(chip, undercut, w = j_length, s = ubridge_width, length = finger_length, layer = Ulayer)
 
+    # do second undercut near bridge
+    if gap < ubridge_width:
+        undercut.translatePos((-(ubridge_width-gap), 0), angle=0)
+        mw.CPW_straight(chip, undercut, w = j_length+2*ubridge_width, s = (lead - j_length)/2, length = (ubridge_width-gap), layer = Ulayer)
+
 # checker_board for resolution tests
 def checker_board(chip, structure, start, num, square_size, layer=None):
     x, y = start
@@ -323,12 +334,12 @@ def create_clover_leaf_checkerboard(chip, loc, jlayer='20_SE1', M1_layer="5_M1",
         AlphaNumStr(chip, label_struct, f'{jlayer}', size=text_size)
 
 def create_test_grid(chip, no_column, no_row, x_var, y_var, x_key, y_key, ja_length, j_length,
-                     gap_width, window_width, ubridge_width, no_gap, start_grid_x,
+                     gap_width_ja, gap_width_j, window_width, ubridge_width, no_gap, start_grid_x,
                      start_grid_y, M1_pads, ulayer_edge, test_JA, test_smallJ,
                      dose_Jlayer_row, dose_Ulayer_column, pad_w, pad_s,
                      ptDensity, pad_l, lead_length, cpw_s, doseU, doseJ, jgrid_skip=1, ugrid_skip=1,
                      do_e_beam_label= True, arb_struct=False, arb_path=None, arb_ulayer=None,
-                     arb_jlayer=None,**kwargs):
+                     arb_jlayer=None, do_bandage=True, arb_gnd_width=None, **kwargs):
 
     if M1_pads:
         row_sep = 490
@@ -359,6 +370,12 @@ def create_test_grid(chip, no_column, no_row, x_var, y_var, x_key, y_key, ja_len
     else:
         ulayer = ['60_SE1_JJ'] * no_row
 
+    if do_bandage:
+        bandage_ulayer = '699_JJ_bandage_Ucut'
+        bandage_jlayer = '299_JJ_bandage_Jcut'
+        chip.wafer.addLayer(bandage_ulayer, 255)
+        chip.wafer.addLayer(bandage_jlayer, 1)
+
     for row in range(no_row):
 
         row_label = m.Structure(chip, start = (start_grid_x-250, start_grid_y + row * row_sep),)
@@ -382,8 +399,10 @@ def create_test_grid(chip, no_column, no_row, x_var, y_var, x_key, y_key, ja_len
             
             if test_JA:
                 lead = ja_length[row][i]
+                
             elif test_smallJ:
-                lead = j_length[row][i]+1
+                # lead = j_length[row][i]+0.3
+                lead = 0.6 # set equal to a constant for even resistivity. Small enough for bandaging
 
             # Left pad
             if M1_pads:
@@ -395,13 +414,27 @@ def create_test_grid(chip, no_column, no_row, x_var, y_var, x_key, y_key, ja_len
                 s_test_gnd = s_test.clone()
                 s_test.translatePos((-lead_length, 0))
                 s_test_ubridge = s_test.clone()
+                s_bandage = s_test.clone()
+
 
                 mw.Strip_taper(chip, s_test, length=lead_length, w0 = pad_w/10, w1 = lead, layer = jlayer[i])
                 mw.Strip_straight(chip, s_test, length=lead_length, w = lead, layer = jlayer[i])
                 
                 if ulayer_edge:
+                    s_test_ubridge.translatePos((-ubridge_width[row][i], 0))
+                    mw.Strip_straight(chip, s_test_ubridge, length=ubridge_width[row][i], w = pad_w/10+2*ubridge_width[row][i], layer = ulayer[row])
                     mw.CPW_taper(chip, s_test_ubridge, length=lead_length, w0 = pad_w/10, w1 = lead, s0 = ubridge_width[row][i], s1 = ubridge_width[row][i], layer = ulayer[row])
                     mw.CPW_straight(chip, s_test_ubridge, w = lead, s = ubridge_width[row][i], length = lead_length, layer = ulayer[row])
+            
+                if do_bandage:
+                    s_bandage.translatePos((-lead_length/2-ubridge_width[row][i], 0))
+                    mw.Strip_straight(chip, s_bandage, length=ubridge_width[row][i], w = pad_w/5+2*ubridge_width[row][i], s = cpw_s, layer = bandage_ulayer)
+                    mw.Strip_straight(chip, s_bandage, length=lead_length, w = pad_w/5, s = cpw_s, layer = bandage_jlayer)
+                    s_bandage.translatePos((-lead_length, 0))
+                    mw.CPW_straight(chip, s_bandage, w = pad_w/5, s = ubridge_width[row][i], length = lead_length, layer = bandage_ulayer)
+                    mw.Strip_straight(chip, s_bandage, length=ubridge_width[row][i], w = pad_w/5+2*ubridge_width[row][i], s = cpw_s, layer = bandage_ulayer)
+
+            
             elif not arb_struct:
                 s_test_ubridge = s_test.clone()
 
@@ -409,6 +442,8 @@ def create_test_grid(chip, no_column, no_row, x_var, y_var, x_key, y_key, ja_len
                 mw.Strip_straight(chip, s_test, length=lead_length/5, w = lead, layer = jlayer[i])
 
                 if ulayer_edge:
+                    s_test_ubridge.translatePos((-ubridge_width[row][i], 0))
+                    mw.Strip_straight(chip, s_test_ubridge, length=ubridge_width[row][i], w = pad_w/10+2*ubridge_width[row][i], layer = ulayer[row])
                     mw.CPW_taper(chip, s_test_ubridge, length=lead_length/5, w0 = pad_w/10, w1 = lead, s0 = ubridge_width[row][i], s1 = ubridge_width[row][i], layer = ulayer[row])
                     mw.CPW_straight(chip, s_test_ubridge, w = lead, s = ubridge_width[row][i], length = lead_length/5, layer = ulayer[row])
 
@@ -426,23 +461,25 @@ def create_test_grid(chip, no_column, no_row, x_var, y_var, x_key, y_key, ja_len
 
 
             if test_JA:
-                junction_chain(chip, s_test, n_junc_array=no_gap, w=window_width[row][i], s=lead, gap=gap_width[row][i], CW = True, finalpiece = False, Jlayer = jlayer[i], Ulayer=ulayer[row])
+                junction_chain(chip, s_test, n_junc_array=no_gap, w=window_width[row][i], s=lead, gap=gap_width_ja[row][i], CW = True, finalpiece = False, Jlayer = jlayer[i], Ulayer=ulayer[row])
 
             elif test_smallJ:
                 x, y = s_test.getPos((0, +lead/2))
-                smallJ(chip, s_test, (x, y), j_length[row][i], Jlayer = jlayer[i], Ulayer = ulayer[row], lead = lead, gap=gap_width[row][i])
+                smallJ(chip, s_test, (x, y), j_length[row][i], Jlayer = jlayer[i], Ulayer = ulayer[row], lead = lead, gap=gap_width_j[row][i], ubridge_width=ubridge_width[row][i])
             
             elif arb_struct:
                 x, y = s_test.getPos((0, 0))
                 add_imported_polyLine(chip, start=(x, y), file_name=arb_path, rename_dict={arb_jlayer: jlayer[i], arb_ulayer: ulayer[row]}, scale=1.0)
 
             s_test_ubridge = s_test.clone()
+            s_bandage = s_test.clone()
 
             # Right pad
             if M1_pads:
                 if ulayer_edge:
                     mw.CPW_straight(chip, s_test_ubridge, w = lead, s = ubridge_width[row][i], length = lead_length, layer = ulayer[row])
                     mw.CPW_taper(chip, s_test_ubridge, length=lead_length, w1 = pad_w/10, w0 = lead, s0 = ubridge_width[row][i], s1 = ubridge_width[row][i], layer = ulayer[row])
+                    mw.Strip_straight(chip, s_test_ubridge, length=ubridge_width[row][i], w = pad_w/10+2*ubridge_width[row][i], layer = ulayer[row])
 
                 mw.Strip_straight(chip, s_test, length=lead_length, w = lead, s = cpw_s, layer = jlayer[i])
                 mw.Strip_taper(chip, s_test, length=lead_length, w1 = pad_w/10, w0 = lead, layer = jlayer[i])
@@ -453,12 +490,21 @@ def create_test_grid(chip, no_column, no_row, x_var, y_var, x_key, y_key, ja_len
                 mw.CPW_straight(chip, s_test, w = pad_w, s = pad_s, length = pad_l, ptDensity = ptDensity)
             
                 mw.CPW_stub_round(chip, s_test, w = pad_w, s = pad_s, ptDensity = ptDensity, flipped = False)
-    
+
+                if do_bandage:
+                    s_bandage.translatePos((lead_length/2-ubridge_width[row][i]+lead_length, 0))
+                    mw.Strip_straight(chip, s_bandage, length=ubridge_width[row][i], w = pad_w/5+2*ubridge_width[row][i], s = cpw_s, layer = bandage_ulayer)
+                    mw.Strip_straight(chip, s_bandage, length=lead_length, w = pad_w/5, s = cpw_s, layer = bandage_jlayer)
+                    s_bandage.translatePos((-lead_length, 0))
+                    mw.CPW_straight(chip, s_bandage, w = pad_w/5, s = ubridge_width[row][i], length = lead_length, layer = bandage_ulayer)
+                    mw.Strip_straight(chip, s_bandage, length=ubridge_width[row][i], w = pad_w/5+2*ubridge_width[row][i], s = cpw_s, layer = bandage_ulayer)
+
             elif not arb_struct:
                 if ulayer_edge:
                     s_test_ubridge = s_test.clone()
                     mw.CPW_straight(chip, s_test_ubridge, w = lead, s = ubridge_width[row][i], length = lead_length/5, layer = ulayer[row])
                     mw.CPW_taper(chip, s_test_ubridge, length=lead_length/5, w1 = pad_w/10, w0 = lead, s0 = ubridge_width[row][i], s1 = ubridge_width[row][i], layer = ulayer[row])
+                    mw.Strip_straight(chip, s_test_ubridge, length=ubridge_width[row][i], w = pad_w/10+2*ubridge_width[row][i], layer = ulayer[row])
 
                 mw.Strip_straight(chip, s_test, length=lead_length/5, w = lead, s = cpw_s, layer = jlayer[i])
                 mw.Strip_taper(chip, s_test, length=lead_length/5, w1 = pad_w/10, w0 = lead, layer = jlayer[i])
@@ -467,25 +513,24 @@ def create_test_grid(chip, no_column, no_row, x_var, y_var, x_key, y_key, ja_len
             if test_JA:
 
                 if len(no_gap) <= 1:
-                    gnd_width = lead_length*2 + (gap_width[row][i] + window_width[row][i]) * no_gap[0] - window_width[row][i]
+                    gnd_width = lead_length*2 + (gap_width_ja[row][i] + window_width[row][i]) * no_gap[0] - window_width[row][i]
 
                 elif len(no_gap) >= 2:
                     arraylength = 0
                     for j in range(len(no_gap)):
                         arraylength += (-1)**j*no_gap[j]
 
-                    gnd_width = lead_length*2 + (gap_width[row][i] + window_width[row][i]) * arraylength - window_width[row][i]
+                    gnd_width = lead_length*2 + (gap_width_ja[row][i] + window_width[row][i]) * arraylength - window_width[row][i]
 
             elif test_smallJ:
                 # 0.5 = LL taper length
                 # 1.36 = LL finger length
-                gnd_width = lead_length*2 + 0.5 + 1.36 + gap_width[row][i]
+                gnd_width = lead_length*2 + 0.5 + 1.36 + gap_width_j[row][i]
 
             elif arb_struct:
                 # 0.5 = LL taper length
                 # 1.36 = LL finger length
-                gnd_width = lead_length*2 + 0.5 + 1.36 + gap_width[row][i]
-                # TODO: update gnd_width to fit for arbitrary structure
+                gnd_width = arb_gnd_width
 
             if not M1_pads:
                 position = (-(lead_length)*(2-4/5)/2, -40)
@@ -557,13 +602,62 @@ class Fluxonium4inWafer(m.Wafer):
             doMirrored(MarkerSquare, self, pt, 80,layer='EBEAM_MARK')
             doMirrored(MarkerSquare, self, pt, 80,layer='5_M1')
 
+    # chip labels in specified location on wafer
+    def add_chip_labels(self, loc=(100,100), height=600, layer='MARKERS'):
+        """
+        Add chip labels to all chips on wafer at specified location
+        WARNING: Text size is not naturally visible on klayout, make sure it doesn't intersect
+
+        Args:
+            loc (tuple): location of chip labels
+            height (int): height of chip labels
+            layer (str): layer of chip labels
+        """
+        for i in range(len(self.chips)):
+            #identifying marks
+            self.add(dxf.text(str(i),vadd(self.chipPts[i],loc),height=height,layer=layer))
+
+    # add wafer name to every chip on wafer
+    def add_wafer_name(self, loc=(3500,100), height=200, layer='MARKERS'):
+        """
+        Add wafer name to all chips on wafer at specified location
+        WARNING: Text size is not naturally visible on klayout, make sure it doesn't intersect
+
+        Args:
+            loc (tuple): location of wafer name
+            height (int): height of wafer name
+            layer (str): layer of wafer name
+        """
+        for i in range(len(self.chips)):
+            #identifying marks
+            self.add(dxf.text(self.fileName,vadd(self.chipPts[i],loc),height=height,layer=layer))
+
+
 class ImportedChip(m.Chip):
     def __init__(self,wafer,chipID,layer,file_name,rename_dict=None,
                  chipWidth=6800, chipHeight=6800, surpress_warnings=False,
                  do_chip_title=True, do_e_beam_alignment_marks=True):
         super().__init__(wafer,chipID,layer)
 
-        doc = ezdxf.readfile(file_name)
+        layout = Layout()
+        layout.read(file_name)
+        
+        # Create a new layout for DXF (DXF doesn't support hierarchy)
+        flat_layout = Layout()
+        flat_layout.dbu = layout.dbu  # Set the database unit
+
+        new_cell = flat_layout.create_cell('TOP')
+        # Flatten the layout and copy all cells to the new layout
+        for i, cell in enumerate(layout.each_cell()):
+            cell.flatten(-1)
+            new_cell.copy_tree(cell)
+
+        # Write the flattened layout to DXF
+        flattened_filename = file_name.split('.')[0] + '_flattened.dxf'
+        flat_layout.write(flattened_filename)
+            
+        # read in with ezdxf
+        doc = ezdxf.readfile(flattened_filename)
         doc.header['$INSUNITS'] = 13 
         msp = doc.modelspace()
 
@@ -645,7 +739,11 @@ def add_imported_polyLine(chip, start, file_name, scale=1.0, rename_dict=None):
         pts = [vmul_scalar(pt, scale) for pt in pts]
         # shift points to start
         pts = [vadd(start, pt) for pt in pts]
-        pts.append(pts[0])
+        try:
+            pts.append(pts[0])
+        except:
+            #print(f'No points in POLYLINE, skipping')
+            continue
         poly = dxf.polyline(
             points=pts,
             color=entity.dxf.color,
@@ -730,7 +828,7 @@ class StandardTestChip(TestChip):
             params[1]['test_JA'] = True
             params[1]['start_grid_y'] = 3500
 
-            self.save_dose_table(x_swept, y_swept, self.chipID, default_params['dose_J'], default_params['dose_U'])
+            self.save_dose_table(x_swept, y_swept, self.chipID, default_params['dose_J'], default_params['dose_U'], PEC_factor=params[0]['PEC_factor'])
         elif test_index == 1:
             params[0]['dose_Jlayer_row'] = True
             params[0]['dose_Ulayer_column'] = True
@@ -739,7 +837,7 @@ class StandardTestChip(TestChip):
             params[0]['doseU'] = y_var
             params[0]['jgrid_skip'] = 5
 
-            self.save_dose_table(x_swept, y_swept, self.chipID, default_params['dose_J'], default_params['dose_U'], jgrid_skip=5)
+            self.save_dose_table(x_swept, y_swept, self.chipID, default_params['dose_J'], default_params['dose_U'], jgrid_skip=5, PEC_factor=params[0]['PEC_factor'])
         elif test_index == 2:
             params[0]['dose_Jlayer_row'] = True
             params[0]['dose_Ulayer_column'] = True
@@ -748,18 +846,18 @@ class StandardTestChip(TestChip):
             params[0]['doseU'] = y_var
             params[0]['jgrid_skip'] = 5
 
-            self.save_dose_table(x_swept, y_swept, self.chipID, default_params['dose_J'], default_params['dose_U'], jgrid_skip=5)
+            self.save_dose_table(x_swept, y_swept, self.chipID, default_params['dose_J'], default_params['dose_U'], jgrid_skip=5, PEC_factor=params[0]['PEC_factor'])
         elif test_index in [3, 4]:
             params[0]['test_JA'] = True
-            params[0]['gap_width'] = x_var
+            params[0]['gap_width_ja'] = x_var
             params[0]['ja_length'] = y_var
         elif test_index in [5, 6]:
             params[0]['test_JA'] = True
-            params[0]['gap_width'] = x_var
+            params[0]['gap_width_ja'] = x_var
             params[0]['window_width'] = y_var
         elif test_index in [7, 8]:
             params[0]['test_smallJ'] = True
-            params[0]['gap_width'] = x_var
+            params[0]['gap_width_j'] = x_var
             params[0]['j_length'] = y_var
 
         if not do_only_params:
@@ -806,12 +904,12 @@ class StandardTestChip(TestChip):
         elif test_index in [3, 4]:
             # bridge_gap, bridge_len
             self.x_key = 'gap'
-            self.x_low_default = 0.10
-            self.x_high_default = 0.68
+            self.x_low_default = 0.00
+            self.x_high_default = 0.32
 
             self.y_key = 'len'
             self.y_low_default = 1.0
-            self.y_high_default = 8.0
+            self.y_high_default = 6.0
             
         elif test_index in [5, 6]:
             # window_gap, window_width
@@ -826,7 +924,7 @@ class StandardTestChip(TestChip):
         elif test_index in [7, 8]:
             # JJ_gap, JJ_len
             self.x_key = 'gap'
-            self.x_low_default = 0.05
+            self.x_low_default = 0.00 # start at 0 for shorts
             self.x_high_default = 0.32
 
             self.y_key = 'len'
@@ -863,6 +961,10 @@ class StandardTestChip(TestChip):
             f.write(f'20_SE1, {dose_J_default}\n')
             f.write(f'60_SE1_JJ, {dose_U_default / PEC_factor}\n')
 
+            # assign bandage layers to default values
+            f.write(f'299_JJ_bandage_Jcut, {dose_J_default}\n')
+            f.write(f'699_JJ_bandage_Ucut, {dose_U_default / PEC_factor}\n')
+
             # accounts for klayout renaming dose layers
             if save_klayout_rename:
                 for i, doseJ in enumerate(doseJ_range):
@@ -871,9 +973,9 @@ class StandardTestChip(TestChip):
                     updated_doseU = doseU / PEC_factor # PEC factor as we assign PEC in BEAMER
                     f.write(f'L6{j*ugrid_skip:02}D0_SE1_JJ_dose_{j*ugrid_skip:02}_{round(doseU)}_uC, {updated_doseU}\n')
                 
-                # assign 20_SE1' and '60_SE1_JJ' to default values:
-                f.write(f'L20D0_SE1, {dose_J_default}\n')
-                f.write(f'L60D0_SE1_JJ, {dose_U_default / PEC_factor}\n')
+                # assign bandage layers to default values
+                f.write(f'L299D0_JJ_bandage_Jcut, {dose_J_default}\n')
+                f.write(f'L699D0_JJ_bandage_Ucut, {dose_U_default / PEC_factor}\n')
 
         if print_file_location:
             print(f"Dose table saved to: {cwd}\\dose_table_{chipID}_{date}.txt")
@@ -890,7 +992,8 @@ class StandardTestChip(TestChip):
         window_width = grid_from_entry(default_params['window_width'], no_row, no_column)
         ja_length = grid_from_entry(default_params['ja_length'], no_row, no_column)
         j_length = grid_from_entry(default_params['j_length'], no_row, no_column)
-        gap_width = grid_from_entry(default_params['gap_width'], no_row, no_column)
+        gap_width_ja = grid_from_entry(default_params['gap_width_ja'], no_row, no_column)
+        gap_width_j = grid_from_entry(default_params['gap_width_j'], no_row, no_column)
         
         params = {
             'M1_pads': False,   # Probe pads? No -> tigher packing
@@ -911,7 +1014,8 @@ class StandardTestChip(TestChip):
             
             'ja_length': ja_length,
             'j_length': j_length,
-            'gap_width': gap_width,
+            'gap_width_ja': gap_width_ja,
+            'gap_width_j': gap_width_j,
             'window_width': window_width,
             'ubridge_width': ubridge_width,
             'doseJ': doseJ,
@@ -925,6 +1029,7 @@ class StandardTestChip(TestChip):
             'ptDensity': default_params['ptDensity'],
             'lead_length': default_params['lead_length'],
             'cpw_s': default_params['cpw_s'],
+            'PEC_factor': default_params['PEC_factor']
         }
 
         return params
