@@ -20,6 +20,8 @@ from dxfwrite.entities import Polyline
 import ezdxf
 import datetime
 
+from pya import Layout
+
 import maskLib.MaskLib as m
 import maskLib.microwaveLib as mw
 from maskLib.utilities import curveAB
@@ -604,7 +606,7 @@ class Fluxonium4inWafer(m.Wafer):
     def add_chip_labels(self, loc=(100,100), height=600, layer='MARKERS'):
         """
         Add chip labels to all chips on wafer at specified location
-        WARNING: Text
+        WARNING: Text size is not naturally visible on klayout, make sure it doesn't intersect
 
         Args:
             loc (tuple): location of chip labels
@@ -615,6 +617,21 @@ class Fluxonium4inWafer(m.Wafer):
             #identifying marks
             self.add(dxf.text(str(i),vadd(self.chipPts[i],loc),height=height,layer=layer))
 
+    # add wafer name to every chip on wafer
+    def add_wafer_name(self, loc=(3500,100), height=200, layer='MARKERS'):
+        """
+        Add wafer name to all chips on wafer at specified location
+        WARNING: Text size is not naturally visible on klayout, make sure it doesn't intersect
+
+        Args:
+            loc (tuple): location of wafer name
+            height (int): height of wafer name
+            layer (str): layer of wafer name
+        """
+        for i in range(len(self.chips)):
+            #identifying marks
+            self.add(dxf.text(self.fileName,vadd(self.chipPts[i],loc),height=height,layer=layer))
+
 
 class ImportedChip(m.Chip):
     def __init__(self,wafer,chipID,layer,file_name,rename_dict=None,
@@ -622,7 +639,25 @@ class ImportedChip(m.Chip):
                  do_chip_title=True, do_e_beam_alignment_marks=True):
         super().__init__(wafer,chipID,layer)
 
-        doc = ezdxf.readfile(file_name)
+        layout = Layout()
+        layout.read(file_name)
+        
+        # Create a new layout for DXF (DXF doesn't support hierarchy)
+        flat_layout = Layout()
+        flat_layout.dbu = layout.dbu  # Set the database unit
+
+        new_cell = flat_layout.create_cell('TOP')
+        # Flatten the layout and copy all cells to the new layout
+        for i, cell in enumerate(layout.each_cell()):
+            cell.flatten(-1)
+            new_cell.copy_tree(cell)
+
+        # Write the flattened layout to DXF
+        flattened_filename = file_name.split('.')[0] + '_flattened.dxf'
+        flat_layout.write(flattened_filename)
+            
+        # read in with ezdxf
+        doc = ezdxf.readfile(flattened_filename)
         doc.header['$INSUNITS'] = 13 
         msp = doc.modelspace()
 
