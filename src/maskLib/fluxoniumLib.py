@@ -977,6 +977,9 @@ class StandardTestChip(TestChip):
                 f.write(f'L299D0_JJ_bandage_Jcut, {dose_J_default}\n')
                 f.write(f'L699D0_JJ_bandage_Ucut, {dose_U_default / PEC_factor}\n')
 
+                f.write(f"L20D0_SE1, {dose_J_default}\n")
+                f.write(f"L60D0_SE1_JJ, {dose_U_default / PEC_factor}\n")
+
         if print_file_location:
             print(f"Dose table saved to: {cwd}\\dose_table_{chipID}_{date}.txt")
 
