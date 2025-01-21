@@ -21,6 +21,9 @@ import ezdxf
 import datetime
 
 from pya import Layout
+import gdspy
+import cv2
+from matplotlib import pyplot as plt
 
 import maskLib.MaskLib as m
 import maskLib.microwaveLib as mw
@@ -421,8 +424,8 @@ def create_test_grid(chip, no_column, no_row, x_var, y_var, x_key, y_key, ja_len
                 mw.Strip_straight(chip, s_test, length=lead_length, w = lead, layer = jlayer[i])
                 
                 if ulayer_edge:
-                    s_test_ubridge.translatePos((-ubridge_width[row][i], 0))
-                    mw.Strip_straight(chip, s_test_ubridge, length=ubridge_width[row][i], w = pad_w/10+2*ubridge_width[row][i], layer = ulayer[row])
+                    s_test_ubridge.translatePos((-3*ubridge_width[row][i], 0))
+                    mw.Strip_straight(chip, s_test_ubridge, length=3*ubridge_width[row][i], w = pad_w/10+2*ubridge_width[row][i], layer = ulayer[row])
                     mw.CPW_taper(chip, s_test_ubridge, length=lead_length, w0 = pad_w/10, w1 = lead, s0 = ubridge_width[row][i], s1 = ubridge_width[row][i], layer = ulayer[row])
                     mw.CPW_straight(chip, s_test_ubridge, w = lead, s = ubridge_width[row][i], length = lead_length, layer = ulayer[row])
             
@@ -503,8 +506,8 @@ def create_test_grid(chip, no_column, no_row, x_var, y_var, x_key, y_key, ja_len
                 if ulayer_edge:
                     s_test_ubridge = s_test.clone()
                     mw.CPW_straight(chip, s_test_ubridge, w = lead, s = ubridge_width[row][i], length = lead_length/5, layer = ulayer[row])
-                    mw.CPW_taper(chip, s_test_ubridge, length=lead_length/5, w1 = pad_w/10, w0 = lead, s0 = ubridge_width[row][i], s1 = ubridge_width[row][i], layer = ulayer[row])
-                    mw.Strip_straight(chip, s_test_ubridge, length=ubridge_width[row][i], w = pad_w/10+2*ubridge_width[row][i], layer = ulayer[row])
+                    mw.CPW_taper(chip, s_test_ubridge, length=lead_length/5, w1 = pad_w/10, w0 = lead, s0 = 3*ubridge_width[row][i], s1 = 3*ubridge_width[row][i], layer = ulayer[row])
+                    mw.Strip_straight(chip, s_test_ubridge, length=3*ubridge_width[row][i], w = pad_w/10+2*ubridge_width[row][i], layer = ulayer[row])
 
                 mw.Strip_straight(chip, s_test, length=lead_length/5, w = lead, s = cpw_s, layer = jlayer[i])
                 mw.Strip_taper(chip, s_test, length=lead_length/5, w1 = pad_w/10, w0 = lead, layer = jlayer[i])
@@ -632,6 +635,125 @@ class Fluxonium4inWafer(m.Wafer):
             #identifying marks
             self.add(dxf.text(self.fileName,vadd(self.chipPts[i],loc),height=height,layer=layer))
 
+# import image, binarize based on threshold
+def binarize_image(image_path, threshold=0.5, show=False, save=False):
+    # Read the image with alpha channel
+    img = cv2.imread(image_path, cv2.IMREAD_UNCHANGED)
+    
+    if img is None:
+        raise ValueError("Image not found or unable to read.")
+    
+    # convert image to grayscale
+    img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+    # binarize
+    _, binary = cv2.threshold(img_gray, threshold*255, 1, cv2.THRESH_BINARY)
+
+    # invert binary
+    binary = 1 - binary
+
+    # Check if the image has an alpha channel
+    if img.shape[2] == 4:
+        print("The image has an alpha channel. Setting equal to 0")
+
+        # Extract the alpha channel
+        alpha_channel = img[:,:,3]
+
+        # Create a mask: 0 for transparent pixels (alpha == 0), 1 for non-transparent
+        mask = np.where(alpha_channel == 0, 0, 1).astype(np.uint8)
+
+        # combine the binary image with the mask
+        binarized_with_alpha = 255*cv2.bitwise_and(binary, mask)
+
+    else:
+        binarized_with_alpha = 255*binary
+
+    # invert the image 255 -> 0, 0 -> 255
+    binarized_with_alpha = 255 - binarized_with_alpha
+
+    if show:
+        # plt.imshow(binary, cmap='gray')
+        plt.imshow(binarized_with_alpha, cmap='gray')
+        plt.show()
+
+    if save:
+        cv2.imwrite(image_path[:-4] + '_bw.png', binarized_with_alpha)
+
+    return binarized_with_alpha
+
+def image_to_gds_file(fileName, layerNum, outputFileName=None, mergeShapes=True, extent=300, outputDXF=False):
+    """Convert an image file (fileName) to a GDS file
+    """
+    img = cv2.imread(fileName)
+
+    if img is None:
+        raise ValueError("Image not found or unable to read.")
+ 
+    width = img.shape[1]
+    height = img.shape[0]
+
+    # Convert an image to grayscale one
+    gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
+
+    _, binaryImage = cv2.threshold(gray, 0, 255, cv2.THRESH_OTSU)
+    
+    # The GDSII file is called a library, which contains multiple cells.
+    lib = gdspy.GdsLibrary()
+    gdspy.current_library=gdspy.GdsLibrary()
+
+    polygons = []
+
+    grid = lib.new_cell("GRID")
+
+    for x in range(width):
+        for y in range(height):
+            if binaryImage.item(y, x) == 0:
+                polygons.append([(x, y), (x + 1, y),(x + 1, y + 1), (x, y + 1)])
+
+    polygonSet = gdspy.PolygonSet(polygons)
+
+    polygonSet.mirror((1, 0))
+
+    # translate to origin
+    ((xmin,ymin),(xmax,ymax)) = polygonSet.get_bounding_box()
+    polygonSet.translate(-(xmax+xmin)/2,-(ymax+ymin)/2)
+
+    # scale max dimension to extent
+    scale = extent/max(xmax-xmin,ymax-ymin)
+    polygonSet.scale(scale)
+
+    if mergeShapes is True:
+        polygonSet = gdspy.boolean(polygonSet, None, 'or')
+
+    grid.add(polygonSet)
+
+    if outputFileName is None:
+        outputFileName = fileName[:-4] + ".gds"
+
+    lib.write_gds(outputFileName)
+    print(f"GDS file saved as '{outputFileName}'")
+
+    if outputDXF:
+        # Load the GDS file
+        layout = Layout()
+        layout.read(outputFileName)
+
+        # layout.write("output.dxf")
+
+        # Create a new layout for DXF (DXF doesn't support hierarchy)
+        flat_layout = Layout()
+        flat_layout.dbu = layout.dbu  # Set the database unit
+
+        new_cell = flat_layout.create_cell('TOP')
+        # Flatten the layout and copy all cells to the new layout
+        for i, cell in enumerate(layout.each_cell()):
+            cell.flatten(-1)
+            new_cell.copy_tree(cell)
+
+        # Write the flattened layout to DXF
+        flat_layout.write(outputFileName[:-4] + ".dxf")
+
+        print(f"DXF file saved as '{outputFileName[:-4]}.dxf'")
 
 class ImportedChip(m.Chip):
     def __init__(self,wafer,chipID,layer,file_name,rename_dict=None,
@@ -976,6 +1098,9 @@ class StandardTestChip(TestChip):
                 # assign bandage layers to default values
                 f.write(f'L299D0_JJ_bandage_Jcut, {dose_J_default}\n')
                 f.write(f'L699D0_JJ_bandage_Ucut, {dose_U_default / PEC_factor}\n')
+
+                f.write(f"L20D0_SE1, {dose_J_default}\n")
+                f.write(f"L60D0_SE1_JJ, {dose_U_default / PEC_factor}\n")
 
         if print_file_location:
             print(f"Dose table saved to: {cwd}\\dose_table_{chipID}_{date}.txt")
