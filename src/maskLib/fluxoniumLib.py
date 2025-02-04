@@ -756,9 +756,9 @@ def image_to_gds_file(fileName, layerNum, outputFileName=None, mergeShapes=True,
         print(f"DXF file saved as '{outputFileName[:-4]}.dxf'")
 
 class ImportedChip(m.Chip):
-    def __init__(self,wafer,chipID,layer,file_name,rename_dict=None,
+    def __init__(self,wafer,chipID,layer,file_name,rename_dict={},
                  chipWidth=6800, chipHeight=6800, surpress_warnings=False,
-                 do_chip_title=True, do_e_beam_alignment_marks=True):
+                 do_chip_title=True, do_e_beam_alignment_marks=True, centered=True):
         super().__init__(wafer,chipID,layer)
 
         layout = Layout()
@@ -775,7 +775,7 @@ class ImportedChip(m.Chip):
             new_cell.copy_tree(cell)
 
         # Write the flattened layout to DXF
-        flattened_filename = file_name.split('.')[0] + '_flattened.dxf'
+        flattened_filename = file_name[:-4] + '_flattened.dxf'
         flat_layout.write(flattened_filename)
             
         # read in with ezdxf
@@ -793,6 +793,10 @@ class ImportedChip(m.Chip):
 
         # if chipWidth and chipHeight are not default, shift all points by the difference/2
         offset = (defaultChipWidth/2, defaultChipHeight/2)
+
+        if not centered:
+            # assume left bottom corner is (0,0)
+            offset = (0, 0)
 
         for entity in msp:
             if entity.dxf.layer in rename_dict:
@@ -816,6 +820,9 @@ class ImportedChip(m.Chip):
                 ))
             elif entity.dxftype() == 'POLYLINE':
                 pts = list(entity.points())
+                if len(pts) == 0:
+                    continue
+
                 pts.append(pts[0])
                 pts = [vadd(pt, offset) for pt in pts]
                 poly = dxf.polyline(
