@@ -905,7 +905,9 @@ class StandardTestChip(TestChip):
                'WINDOW1',
                'WINDOW2',
                'JJ_SIZE1',
-               'JJ_SIZE2'
+               'JJ_SIZE2',
+               'JJ_PROB',
+               'ARR_PROB'
             ]
 
         self.init_default_row_column_probe_pads(test_index)
@@ -979,7 +981,7 @@ class StandardTestChip(TestChip):
             params[0]['jgrid_skip'] = 5
 
             self.save_dose_table(x_swept, y_swept, self.chipID, default_params['dose_J'], default_params['dose_U'], jgrid_skip=5, PEC_factor=params[0]['PEC_factor'])
-        elif test_index in [3, 4]:
+        elif test_index in [3, 4, 10]:
             params[0]['test_JA'] = True
             params[0]['gap_width_ja'] = x_var
             params[0]['ja_length'] = y_var
@@ -987,7 +989,7 @@ class StandardTestChip(TestChip):
             params[0]['test_JA'] = True
             params[0]['gap_width_ja'] = x_var
             params[0]['window_width'] = y_var
-        elif test_index in [7, 8]:
+        elif test_index in [7, 8, 9]:
             params[0]['test_smallJ'] = True
             params[0]['gap_width_j'] = x_var
             params[0]['j_length'] = y_var
@@ -998,7 +1000,7 @@ class StandardTestChip(TestChip):
         self.params = params
 
     def init_default_row_column_probe_pads(self, test_index):
-        if test_index in [1, 2, 4, 6, 8]:
+        if test_index in [1, 2, 4, 6, 8, 9, 10]:
             # cases when we have a probe pads
             self.no_row_default = 12
             self.no_column_default = 6
@@ -1062,6 +1064,27 @@ class StandardTestChip(TestChip):
             self.y_key = 'len'
             self.y_low_default = 0.10
             self.y_high_default = 0.50
+        
+        elif test_index == 9:
+            # JJ_gap, JJ_len
+            self.x_key = 'gap'
+            self.x_low_default = 0.20 # standard bridge width PalWoopW 2/3/25
+            self.x_high_default = self.x_low_default # same value
+
+            self.y_key = 'len'
+            self.y_low_default = 0.15 # smallest JJ
+            self.y_high_default = 0.55 # large JJ
+
+        elif test_index == 10:
+            # JJ_gap, JJ_len
+            self.x_key = 'gap'
+            self.x_low_default = 0.20 # standard bridge width PalWoopW 2/3/25
+            self.x_high_default = self.x_low_default # same value
+
+            self.y_key = 'len'
+            self.y_low_default = 2.5 # short bridges
+            self.y_high_default = 4.5 # long bridges
+
     
     def save_dose_table(self, doseJ_range, doseU_range, chipID, dose_J_default,
                         dose_U_default, PEC_factor=0.25, jgrid_skip=1, ugrid_skip=1, save_klayout_rename=True,
