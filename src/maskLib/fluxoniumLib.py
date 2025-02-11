@@ -598,6 +598,9 @@ class Fluxonium4inWafer(m.Wafer):
 
         self.init(FRAME_LAYER=['703_ChipEdge', 7])
         self.DicingBorder(thin=20, long=10, dash=500)
+        self.DicingBorder(thin=20, long=10, dash=500, layer='5_M1')
+        self.DicingBorder(thin=20, long=10, dash=500, layer='55_SEB1')
+        self.DicingBorder(thin=20, long=10, dash=500, layer='299_JJ_bandage_Jcut')
 
         markerpts = [(-41800,-20800),(-34800,-27800),(-27800,-34800),(-20800,-41800)]
         for pt in markerpts:
