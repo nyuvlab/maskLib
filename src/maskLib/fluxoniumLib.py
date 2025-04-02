@@ -342,7 +342,7 @@ def create_test_grid(chip, no_column, no_row, x_var, y_var, x_key, y_key, ja_len
                      dose_Jlayer_row, dose_Ulayer_column, pad_w, pad_s,
                      ptDensity, pad_l, lead_length, cpw_s, doseU, doseJ, jgrid_skip=1, ugrid_skip=1,
                      do_e_beam_label= True, arb_struct=False, arb_path=None, arb_ulayer=None,
-                     arb_jlayer=None, do_bandage=True, arb_gnd_width=None, **kwargs):
+                     arb_jlayer=None, do_bandage=True, arb_gnd_width=None, do_ccut=True, do_ebeam=True, **kwargs):
 
     if M1_pads:
         row_sep = 490
@@ -404,41 +404,56 @@ def create_test_grid(chip, no_column, no_row, x_var, y_var, x_key, y_key, ja_len
                 lead = ja_length[row][i]
                 
             elif test_smallJ:
-                # lead = j_length[row][i]+0.3
-                lead = 0.6 # set equal to a constant for even resistivity. Small enough for bandaging
-
+                lead = 1.5 # set equal to a constant for even resistivity. Small enough for bandaging
+                if j_length[row][i] > 1.2:
+                    lead = j_length[row][i] + 0.8
+                
             # Left pad
             if M1_pads:
                 mw.CPW_stub_round(chip, s_test, w = pad_w, s = pad_s, ptDensity = ptDensity, flipped = True)
                 mw.CPW_straight(chip, s_test, w = pad_w, s = pad_s, length = pad_l, ptDensity = ptDensity)
                 
-                mw.CPW_taper(chip, s_test, length=lead_length, w0 = pad_w, s0=pad_s, w1 = lead + 3, s1=pad_s)
+                mw.CPW_taper(chip, s_test, length=lead_length, w0 = pad_w, s0=pad_s, w1 = pad_w/4, s1=pad_s)
+                if do_ccut:
+                    mw.CPW_straight(chip, s_test, w = pad_w/4, s = (80-pad_w/4)/2, length = 2)
+                    s_test.translatePos((-2, 0))
+                    mw.Strip_straight(chip, s_test, length=2, w = 7)
+
+                    mw.CPW_straight(chip, s_test, w = pad_w/4, s = (80-pad_w/4)/2, length = 3)
+                    s_test.translatePos((-3, 0))
+                    mw.Strip_straight(chip, s_test, length=3, w = 3)
+
+                    s_test.translatePos((1*lead_length/6,0))
 
                 s_test_gnd = s_test.clone()
-                s_test.translatePos((-lead_length, 0))
-                s_test_ubridge = s_test.clone()
-                s_bandage = s_test.clone()
+                if do_ccut:
+                    s_test_gnd.translatePos((-1*lead_length/6, 0))
 
+                s_test.translatePos((-lead_length/2, 0))
 
-                mw.Strip_taper(chip, s_test, length=lead_length, w0 = pad_w/10, w1 = lead, layer = jlayer[i])
-                mw.Strip_straight(chip, s_test, length=lead_length, w = lead, layer = jlayer[i])
+                if do_ebeam:
+                    s_test_ubridge = s_test.clone()
+                    s_bandage = s_test.clone()
+
+                    mw.Strip_taper(chip, s_test, length=lead_length/2, w0 = pad_w/5, w1 = lead, layer = jlayer[i])
+                    mw.Strip_straight(chip, s_test, length=lead_length, w = lead, layer = jlayer[i])
                 
-                if ulayer_edge:
-                    s_test_ubridge.translatePos((-3*ubridge_width[row][i], 0))
-                    mw.Strip_straight(chip, s_test_ubridge, length=3*ubridge_width[row][i], w = pad_w/10+2*ubridge_width[row][i], layer = ulayer[row])
-                    mw.CPW_taper(chip, s_test_ubridge, length=lead_length, w0 = pad_w/10, w1 = lead, s0 = ubridge_width[row][i], s1 = ubridge_width[row][i], layer = ulayer[row])
-                    mw.CPW_straight(chip, s_test_ubridge, w = lead, s = ubridge_width[row][i], length = lead_length, layer = ulayer[row])
+                    if ulayer_edge:
+                        s_test_ubridge.translatePos((-3*ubridge_width[row][i], 0))
+                        mw.Strip_straight(chip, s_test_ubridge, length=3*ubridge_width[row][i], w = pad_w/5+2*ubridge_width[row][i], layer = ulayer[row])
+                        mw.CPW_taper(chip, s_test_ubridge, length=lead_length/2, w0 = pad_w/5, w1 = lead, s0 = ubridge_width[row][i], s1 = ubridge_width[row][i], layer = ulayer[row])
+                        mw.CPW_straight(chip, s_test_ubridge, w = lead, s = ubridge_width[row][i], length = lead_length, layer = ulayer[row])
             
-                if do_bandage:
-                    s_bandage.translatePos((-lead_length/2-ubridge_width[row][i], 0))
-                    mw.Strip_straight(chip, s_bandage, length=ubridge_width[row][i], w = pad_w/5+2*ubridge_width[row][i], s = cpw_s, layer = bandage_ulayer)
-                    mw.Strip_straight(chip, s_bandage, length=lead_length, w = pad_w/5, s = cpw_s, layer = bandage_jlayer)
-                    s_bandage.translatePos((-lead_length, 0))
-                    mw.CPW_straight(chip, s_bandage, w = pad_w/5, s = ubridge_width[row][i], length = lead_length, layer = bandage_ulayer)
-                    mw.Strip_straight(chip, s_bandage, length=ubridge_width[row][i], w = pad_w/5+2*ubridge_width[row][i], s = cpw_s, layer = bandage_ulayer)
+                    if do_bandage:
+                        s_bandage.translatePos((-lead_length/8-ubridge_width[row][i], 0))
+                        mw.Strip_straight(chip, s_bandage, length=ubridge_width[row][i], w = pad_w/10+2*ubridge_width[row][i], s = cpw_s, layer = bandage_ulayer)
+                        mw.Strip_straight(chip, s_bandage, length=lead_length/4, w = pad_w/10, s = cpw_s, layer = bandage_jlayer)
+                        s_bandage.translatePos((-lead_length/4, 0))
+                        mw.CPW_straight(chip, s_bandage, w = pad_w/10, s = ubridge_width[row][i], length = lead_length/4, layer = bandage_ulayer)
+                        mw.Strip_straight(chip, s_bandage, length=ubridge_width[row][i], w = pad_w/10+2*ubridge_width[row][i], s = cpw_s, layer = bandage_ulayer)
 
             
-            elif not arb_struct:
+            elif not arb_struct and do_ebeam:
                 s_test_ubridge = s_test.clone()
 
                 mw.Strip_taper(chip, s_test, length=lead_length/5, w0 = pad_w/10, w1 = lead, layer = jlayer[i])
@@ -450,7 +465,7 @@ def create_test_grid(chip, no_column, no_row, x_var, y_var, x_key, y_key, ja_len
                     mw.CPW_taper(chip, s_test_ubridge, length=lead_length/5, w0 = pad_w/10, w1 = lead, s0 = ubridge_width[row][i], s1 = ubridge_width[row][i], layer = ulayer[row])
                     mw.CPW_straight(chip, s_test_ubridge, w = lead, s = ubridge_width[row][i], length = lead_length/5, layer = ulayer[row])
 
-            if do_e_beam_label:
+            if do_e_beam_label and do_ebeam:
                 e_beam_label = s_test.clone()
                 e_beam_label.translatePos((-13, 10))
                 AlphaNumStr(chip, e_beam_label, y_key, size=(4,4), centered=False, layer='20_SE1')
@@ -462,56 +477,20 @@ def create_test_grid(chip, no_column, no_row, x_var, y_var, x_key, y_key, ja_len
                 e_beam_label.translatePos((4, 0))
                 AlphaNumStr(chip, e_beam_label, str(round_sf(x_var[0][i],3)), size=(4,4), centered=False, layer='20_SE1')
 
-
-            if test_JA:
+            if test_JA and do_ebeam:
                 junction_chain(chip, s_test, n_junc_array=no_gap, w=window_width[row][i], s=lead, gap=gap_width_ja[row][i], CW = True, finalpiece = False, Jlayer = jlayer[i], Ulayer=ulayer[row])
 
-            elif test_smallJ:
+            elif test_smallJ and do_ebeam:
                 x, y = s_test.getPos((0, +lead/2))
                 smallJ(chip, s_test, (x, y), j_length[row][i], Jlayer = jlayer[i], Ulayer = ulayer[row], lead = lead, gap=gap_width_j[row][i], ubridge_width=ubridge_width[row][i])
             
-            elif arb_struct:
+            elif arb_struct and do_ebeam:
                 x, y = s_test.getPos((0, 0))
                 add_imported_polyLine(chip, start=(x, y), file_name=arb_path, rename_dict={arb_jlayer: jlayer[i], arb_ulayer: ulayer[row]}, scale=1.0)
 
             s_test_ubridge = s_test.clone()
             s_bandage = s_test.clone()
 
-            # Right pad
-            if M1_pads:
-                if ulayer_edge:
-                    mw.CPW_straight(chip, s_test_ubridge, w = lead, s = ubridge_width[row][i], length = lead_length, layer = ulayer[row])
-                    mw.CPW_taper(chip, s_test_ubridge, length=lead_length, w1 = pad_w/10, w0 = lead, s0 = ubridge_width[row][i], s1 = ubridge_width[row][i], layer = ulayer[row])
-                    mw.Strip_straight(chip, s_test_ubridge, length=ubridge_width[row][i], w = pad_w/10+2*ubridge_width[row][i], layer = ulayer[row])
-
-                mw.Strip_straight(chip, s_test, length=lead_length, w = lead, s = cpw_s, layer = jlayer[i])
-                mw.Strip_taper(chip, s_test, length=lead_length, w1 = pad_w/10, w0 = lead, layer = jlayer[i])
-
-                s_test.translatePos((-lead_length, 0))
-                
-                mw.CPW_taper(chip, s_test, length=lead_length, w1 = pad_w, w0 = lead, s0 = pad_s, s1 = pad_s)
-                mw.CPW_straight(chip, s_test, w = pad_w, s = pad_s, length = pad_l, ptDensity = ptDensity)
-            
-                mw.CPW_stub_round(chip, s_test, w = pad_w, s = pad_s, ptDensity = ptDensity, flipped = False)
-
-                if do_bandage:
-                    s_bandage.translatePos((lead_length/2-ubridge_width[row][i]+lead_length, 0))
-                    mw.Strip_straight(chip, s_bandage, length=ubridge_width[row][i], w = pad_w/5+2*ubridge_width[row][i], s = cpw_s, layer = bandage_ulayer)
-                    mw.Strip_straight(chip, s_bandage, length=lead_length, w = pad_w/5, s = cpw_s, layer = bandage_jlayer)
-                    s_bandage.translatePos((-lead_length, 0))
-                    mw.CPW_straight(chip, s_bandage, w = pad_w/5, s = ubridge_width[row][i], length = lead_length, layer = bandage_ulayer)
-                    mw.Strip_straight(chip, s_bandage, length=ubridge_width[row][i], w = pad_w/5+2*ubridge_width[row][i], s = cpw_s, layer = bandage_ulayer)
-
-            elif not arb_struct:
-                if ulayer_edge:
-                    s_test_ubridge = s_test.clone()
-                    mw.CPW_straight(chip, s_test_ubridge, w = lead, s = ubridge_width[row][i], length = lead_length/5, layer = ulayer[row])
-                    mw.CPW_taper(chip, s_test_ubridge, length=lead_length/5, w1 = pad_w/10, w0 = lead, s0 = 3*ubridge_width[row][i], s1 = 3*ubridge_width[row][i], layer = ulayer[row])
-                    mw.Strip_straight(chip, s_test_ubridge, length=3*ubridge_width[row][i], w = pad_w/10+2*ubridge_width[row][i], layer = ulayer[row])
-
-                mw.Strip_straight(chip, s_test, length=lead_length/5, w = lead, s = cpw_s, layer = jlayer[i])
-                mw.Strip_taper(chip, s_test, length=lead_length/5, w1 = pad_w/10, w0 = lead, layer = jlayer[i])
-                
             # Ground window for structure 
             if test_JA:
 
@@ -535,6 +514,9 @@ def create_test_grid(chip, no_column, no_row, x_var, y_var, x_key, y_key, ja_len
                 # 1.36 = LL finger length
                 gnd_width = arb_gnd_width
 
+            if do_ccut:
+                gnd_width += 2*lead_length/6
+
             if not M1_pads:
                 position = (-(lead_length)*(2-4/5)/2, -40)
             elif M1_pads:
@@ -542,6 +524,55 @@ def create_test_grid(chip, no_column, no_row, x_var, y_var, x_key, y_key, ja_len
 
             chip.add(dxf.rectangle(s_test_gnd.getPos(position), gnd_width, 80,
                         bgcolor=chip.wafer.bg(), layer="5_M1"))
+
+            # Right pad
+            if M1_pads:
+                if do_ebeam:
+                    if ulayer_edge:
+                        mw.CPW_straight(chip, s_test_ubridge, w = lead, s = ubridge_width[row][i], length = lead_length, layer = ulayer[row])
+                        mw.CPW_taper(chip, s_test_ubridge, length=lead_length/2, w1 = pad_w/5, w0 = lead, s0 = ubridge_width[row][i], s1 = ubridge_width[row][i], layer = ulayer[row])
+                        mw.Strip_straight(chip, s_test_ubridge, length=ubridge_width[row][i], w = pad_w/5+2*ubridge_width[row][i], layer = ulayer[row])
+
+                    mw.Strip_straight(chip, s_test, length=lead_length, w = lead, s = cpw_s, layer = jlayer[i])
+                    mw.Strip_taper(chip, s_test, length=lead_length/2, w1 = pad_w/5, w0 = lead, layer = jlayer[i])
+
+                    s_test.translatePos((-lead_length/2, 0))
+
+                else:
+                    s_test.translatePos((gnd_width+1*lead_length/6, 0))
+
+                if do_ccut:
+                    s_test.translatePos((+1*lead_length/6, 0))
+                    mw.CPW_straight(chip, s_test, w = pad_w/4, s = (80-pad_w/4)/2, length = 3)
+                    s_test.translatePos((-3, 0))
+                    mw.Strip_straight(chip, s_test, length=3, w = 3)
+
+                    mw.CPW_straight(chip, s_test, w = pad_w/4, s = (80-pad_w/4)/2, length = 2)
+                    s_test.translatePos((-2, 0))
+                    mw.Strip_straight(chip, s_test, length=2, w = 7)
+                
+                mw.CPW_taper(chip, s_test, length=lead_length, w1 = pad_w, w0 = pad_w/4, s0 = pad_s, s1 = pad_s)
+                mw.CPW_straight(chip, s_test, w = pad_w, s = pad_s, length = pad_l, ptDensity = ptDensity)
+            
+                mw.CPW_stub_round(chip, s_test, w = pad_w, s = pad_s, ptDensity = ptDensity, flipped = False)
+
+                if do_bandage and do_ebeam:
+                    s_bandage.translatePos((-ubridge_width[row][i]+lead_length+3*lead_length/8, 0))
+                    mw.Strip_straight(chip, s_bandage, length=ubridge_width[row][i], w = pad_w/10+2*ubridge_width[row][i], s = cpw_s, layer = bandage_ulayer)
+                    mw.Strip_straight(chip, s_bandage, length=lead_length/4, w = pad_w/10, s = cpw_s, layer = bandage_jlayer)
+                    s_bandage.translatePos((-lead_length/4, 0))
+                    mw.CPW_straight(chip, s_bandage, w = pad_w/10, s = ubridge_width[row][i], length = lead_length/4, layer = bandage_ulayer)
+                    mw.Strip_straight(chip, s_bandage, length=ubridge_width[row][i], w = pad_w/10+2*ubridge_width[row][i], s = cpw_s, layer = bandage_ulayer)
+
+            elif not arb_struct and do_ebeam:
+                if ulayer_edge:
+                    s_test_ubridge = s_test.clone()
+                    mw.CPW_straight(chip, s_test_ubridge, w = lead, s = ubridge_width[row][i], length = lead_length/5, layer = ulayer[row])
+                    mw.CPW_taper(chip, s_test_ubridge, length=lead_length/5, w1 = pad_w/10, w0 = lead, s0 = 3*ubridge_width[row][i], s1 = 3*ubridge_width[row][i], layer = ulayer[row])
+                    mw.Strip_straight(chip, s_test_ubridge, length=3*ubridge_width[row][i], w = pad_w/10+2*ubridge_width[row][i], layer = ulayer[row])
+
+                mw.Strip_straight(chip, s_test, length=lead_length/5, w = lead, s = cpw_s, layer = jlayer[i])
+                mw.Strip_taper(chip, s_test, length=lead_length/5, w1 = pad_w/10, w0 = lead, layer = jlayer[i])
             
 class TestChip(m.Chip):
     def __init__(self, wafer, chipID, layer, params, test=True, do_clv_and_cb=True,
@@ -602,11 +633,11 @@ class Fluxonium4inWafer(m.Wafer):
         self.DicingBorder(thin=20, long=10, dash=500, layer='55_SEB1')
         self.DicingBorder(thin=20, long=10, dash=500, layer='299_JJ_bandage_Jcut')
 
-        markerpts = [(-41800,-20800),(-34800,-27800),(-27800,-34800),(-20800,-41800)]
+        # WARNING: hardcoded to be in default locations
+        markerpts = [(-13800,-34800),(-13800, 28200),(14200, 28200),(14200, -34800)]
         for pt in markerpts:
             #(note: mirrorX and mirrorY are true by default)
-            doMirrored(MarkerSquare, self, pt, 80,layer='EBEAM_MARK')
-            doMirrored(MarkerSquare, self, pt, 80,layer='5_M1')
+            MarkerSquare(self, pt, 80, layer='EBEAM_MARK')
 
     # chip labels in specified location on wafer
     def add_chip_labels(self, loc=(100,100), height=600, layer='MARKERS'):
@@ -848,7 +879,7 @@ class ImportedChip(m.Chip):
             poses = [(chipWidth-100, chipHeight-100), (100, chipHeight-100), (100, 100), (chipWidth-100, 100)]
             for pos in poses:
                 MarkerSquare(w=self, pos=pos, layer=layer)
-                MarkerSquare(w=self, pos=pos, layer="EBEAM_MARK")
+                # MarkerSquare(w=self, pos=pos, layer="EBEAM_MARK")
             # print(f'e-beam alignment marks added to chip at positions: {poses}')
 
 def add_imported_polyLine(chip, start, file_name, scale=1.0, rename_dict=None):
@@ -907,7 +938,9 @@ class StandardTestChip(TestChip):
                'JJ_SIZE1',
                'JJ_SIZE2',
                'JJ_PROB',
-               'ARR_PROB'
+               'ARR_PROB',
+               'JJ_SIZE3',
+               'ARR_PROB2',
             ]
 
         self.init_default_row_column_probe_pads(test_index)
@@ -981,7 +1014,7 @@ class StandardTestChip(TestChip):
             params[0]['jgrid_skip'] = 5
 
             self.save_dose_table(x_swept, y_swept, self.chipID, default_params['dose_J'], default_params['dose_U'], jgrid_skip=5, PEC_factor=params[0]['PEC_factor'])
-        elif test_index in [3, 4, 10]:
+        elif test_index in [3, 4, 10, 12]:
             params[0]['test_JA'] = True
             params[0]['gap_width_ja'] = x_var
             params[0]['ja_length'] = y_var
@@ -989,7 +1022,7 @@ class StandardTestChip(TestChip):
             params[0]['test_JA'] = True
             params[0]['gap_width_ja'] = x_var
             params[0]['window_width'] = y_var
-        elif test_index in [7, 8, 9]:
+        elif test_index in [7, 8, 9, 11]:
             params[0]['test_smallJ'] = True
             params[0]['gap_width_j'] = x_var
             params[0]['j_length'] = y_var
@@ -1000,7 +1033,7 @@ class StandardTestChip(TestChip):
         self.params = params
 
     def init_default_row_column_probe_pads(self, test_index):
-        if test_index in [1, 2, 4, 6, 8, 9, 10]:
+        if test_index in [1, 2, 4, 6, 8, 9, 10, 11, 12]:
             # cases when we have a probe pads
             self.no_row_default = 12
             self.no_column_default = 6
@@ -1083,6 +1116,16 @@ class StandardTestChip(TestChip):
 
             self.y_key = 'len'
             self.y_low_default = 2.5 # short bridges
+            self.y_high_default = 4.5 # long bridges
+
+        elif test_index in [11, 12]:
+            # JJ_gap, JJ_len
+            self.x_key = 'gap'
+            self.x_low_default = 0.20 # standard bridge width PalWoopW 2/3/25
+            self.x_high_default = self.x_low_default # same value
+
+            self.y_key = 'len'
+            self.y_low_default = .15 # short bridges
             self.y_high_default = 4.5 # long bridges
 
     
