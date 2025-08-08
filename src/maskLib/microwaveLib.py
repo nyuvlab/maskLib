@@ -1,4 +1,11 @@
 # -*- coding: utf-8 -*-
+
+"""
+Last updated Aug 15 2024 by Jaein Han.
+- Added CPW_rect_taper method.
+- Added CPW_bus method.
+"""
+
 """
 Created on Fri Oct  4 17:29:02 2019
 
@@ -10,101 +17,19 @@ Only standard composite components (inductors, launchers) are included here- com
 go in sub-libraries
 """
 
+import math
+import numpy as np 
+
 import maskLib.MaskLib as m
 from dxfwrite import DXFEngine as dxf
 from dxfwrite import const
-from dxfwrite.entities import Polyline
-from dxfwrite.vector2d import vadd, midpoint ,vsub, vector2angle, magnitude, distance
+from dxfwrite.vector2d import vadd ,vsub, vector2angle, distance
 from dxfwrite.algebra import rotate_2d
 
-from maskLib.Entities import SolidPline, SkewRect, CurveRect, RoundRect, InsideCurve, DogBone
+from maskLib.Entities import SkewRect, CurveRect, RoundRect, InsideCurve, DogBone
 from maskLib.utilities import kwargStrip, curveAB
 
-from copy import deepcopy
-from matplotlib.path import Path
-from matplotlib.transforms import Bbox
-import math
 from copy import copy
-import numpy as np 
-
-# ===============================================================================
-# perforate the ground plane with a grid of squares, which avoid any polylines 
-# ===============================================================================
-#TODO move to MaskLib
-
-
-def waffle(chip, grid_x, grid_y=None,width=10,height=None,exclude=None,padx=0,pady=None,bleedRadius=1,layer='0'):
-    radius = max(int(bleedRadius),0)
-    
-    if exclude is None:
-        exclude = ['FRAME']
-    else:
-        exclude.append('FRAME')
-        
-    if grid_y is None:
-        grid_y = grid_x
-    
-    if height is None:
-        height = width
-        
-    if pady is None:
-        pady=padx
-        
-    nx, ny = list(map(int, [(chip.width) / grid_x, (chip.height) / grid_y]))
-    occupied = [[False]*ny for i in range(nx)]
-    for i in range(nx):
-        occupied[i][0] = True
-        occupied[i][-1] = True
-    for i in range(ny):
-        occupied[0][i] = True
-        occupied[-1][i] = True
-    
-    for e in chip.chipBlock.get_data():
-        if isinstance(e.__dxftags__()[0], Polyline):
-            if e.layer not in exclude:
-                o_x_list = []
-                o_y_list = []
-                plinePts = [v.__getitem__('location').__getitem__('xy') for v in e.__dxftags__()[0].get_data()]
-                plinePts.append(plinePts[0])
-                for p in plinePts:
-                    o_x, o_y = list(map(int, (p[0] / grid_x, p[1] / grid_y)))
-                    if 0 <= o_x < nx and 0 <= o_y < ny:
-                        o_x_list.append(o_x)
-                        o_y_list.append(o_y)
-                        
-                        #this will however ignore a rectangle with corners outside the chip...
-                if o_x_list:
-                    path = Path([[pt[0]/grid_x,pt[1]/grid_y] for pt in plinePts],closed=True)
-                    for x in range(min(o_x_list)-1, max(o_x_list)+2):
-                        for y in range(min(o_y_list)-1, max(o_y_list)+2):
-                            try:
-                                if path.contains_point([x+.5,y+.5]):
-                                    occupied[x][y]=True
-                                elif path.intersects_bbox(Bbox.from_bounds(x,y,1.,1.),filled=True):
-                                    occupied[x][y]=True
-                            except IndexError:
-                                pass
-       
-
-    second_pass = deepcopy(occupied)
-    for r in range(radius):
-        for i in range(nx):
-            for j in range(ny):
-                if occupied[i][j]:
-                    for ip, jp in [(i+1,j), (i-1,j), (i,j+1), (i,j-1)]:
-                        try:
-                            second_pass[ip][jp] = True
-                        except IndexError:
-                            pass
-        occupied = deepcopy(second_pass)
-   
-    for i in range(int(padx/grid_x),nx-int(padx/grid_x)):
-        for j in range(int(pady/grid_y),ny-int(pady/grid_y)):
-            if not second_pass[i][j]:
-                pos = i*grid_x + grid_x/2., j*grid_y + grid_y/2.
-                chip.add(dxf.rectangle(pos,width,height,bgcolor=chip.wafer.bg(layer),halign=const.CENTER,valign=const.MIDDLE,layer=layer) )   
-                
-    return chip
 
 # ===============================================================================
 # basic POSITIVE microstrip function definitions
@@ -374,7 +299,58 @@ def CPW_taper(chip,structure,length=None,w0=None,s0=None,w1=None,s1=None,bgcolor
     
     chip.add(SkewRect(struct().getPos((0,-w0/2)),length,s0,(offset[0],w0/2-w1/2+offset[1]),s1,rotation=struct().direction,valign=const.TOP,edgeAlign=const.TOP,bgcolor=bgcolor,**kwargs))
     chip.add(SkewRect(struct().getPos((0,w0/2)),length,s0,(offset[0],w1/2-w0/2+offset[1]),s1,rotation=struct().direction,valign=const.BOTTOM,edgeAlign=const.BOTTOM,bgcolor=bgcolor,**kwargs),structure=structure,offsetVector=(length+offset[0],offset[1]))
+
+def CPW_rect_taper(chip, structure, w_mid, w_arm, l_top, l_bot, s=None, w=None, s_extra=0, bgcolor=None):
+    """
+    Rectangular-shaped taper. Good for coupling with Rectanglemon qubits.
+        w_mid = width of middle
+        w_arm = width of one arm of the taper
+        s = gap width
+        l_top = length of top vertical part of taper
+        l_bot = length of bottom vertical part of taper
+        w = width of taper opening 
+        s_extra = extra gap width (usually for qubit's gap width)
+    """
+    def struct():
+        if isinstance(structure,m.Structure):
+            return structure
+        elif isinstance(structure,tuple):
+            return m.Structure(chip,structure)
+        else:
+            return chip.structure(structure)
+    if bgcolor is None:
+        bgcolor = chip.wafer.bg()
+    if w is None:
+        try: 
+            w = struct().defaults['w']
+        except KeyError:
+            print('\x1b[33ms not defined in ',chip.chipID,'!\x1b[0m')
+    if s is None:
+        try:
+            s = struct().defaults['s']
+        except KeyError:
+            print('\x1b[33ms not defined in ',chip.chipID,'!\x1b[0m')
     
+    # horizontal lines diverging
+    w_top = w_mid/2 - w/2 + w_arm + 2*s + s_extra
+    CPW_straight(chip, structure, s, w, w_top)
+    
+    #vertical lines going down on the outside
+    length = l_top + l_bot
+    w_vert = 2*w_top + w - 2*s
+    CPW_straight(chip, structure, length, w_vert, s)
+
+    # straight line in the middle
+    s0 = structure.cloneAlongLast((l_top,0))
+    CPW_stub_open(chip, s0, length=s, w=max(w_mid+2*s, w_mid+2*s_extra), s=0)
+
+    # vertical lines going down on the inside
+    CPW_straight(chip, s0, l_bot, max(w_mid, w_mid+2*s_extra-2*s), s)
+    
+    # horizontal lines going inward toward qubit
+    CPW_straight(chip, structure, s, w_vert + 2*s, -(w_arm+2*s))
+
+
 def CPW_stub_short(chip,structure,flipped=False,curve_ins=True,curve_out=True,r_out=None,w=None,s=None,length=None,bgcolor=None,**kwargs):
     allow_oversize = (curve_ins != curve_out)
     def struct():
@@ -808,11 +784,28 @@ def CPW_pad(chip,struct,l_pad=0,l_gap=0,padw=300,pads=50,l_lead=None,w=None,s=No
         l_lead = max(l_gap,pads)
     CPW_stub_short(chip,struct,length=l_lead,r_out=r_out,r_ins=r_ins,w=w,s=pads+padw/2-w/2,flipped=False,curve_ins=False,**kwargs)
 
-
+# the launchers are the little bullet-shaped tapers
 def CPW_launcher(chip,struct,l_taper=None,l_pad=0,l_gap=0,padw=300,pads=160,w=None,s=None,r_ins=0,r_out=0,bgcolor=None,**kwargs):
     CPW_stub_open(chip,struct,length=max(l_gap,pads),r_out=r_out,r_ins=r_ins,w=padw,s=pads,flipped=True,**kwargs)
     CPW_straight(chip,struct,max(l_pad,padw),w=padw,s=pads,**kwargs)
     CPW_taper(chip,struct,length=l_taper,w0=padw,s0=pads,**kwargs)
+
+#This launcher is for MIT LL qubits
+def CPW_launcher_MIT_LL(chip,struct,l_taper=None,l_pad=0,l_gap=0,w=None,s=None,r_ins=0,r_out=0,bgcolor=None,**kwargs):
+    
+    l_taper = 150
+    l_stub = 100
+    w0_taper = 160
+    w1_taper = 10
+    padw = 160
+    pads = 200
+    pinw = 160
+    substr_s = 130
+    substr_w = 130
+    
+    CPW_stub_open(chip,struct,length=l_stub,r_out=r_out,r_ins=r_ins,w=pinw,s=substr_s,flipped=True,**kwargs)
+    CPW_straight(chip,struct,pads,w=padw,s=substr_w,**kwargs)
+    CPW_taper(chip,struct,length=l_taper,w0=w0_taper,w1 = w1_taper, s0=substr_w,**kwargs)
 
 def CPW_taper_cap(chip,structure,gap,width,l_straight=0,l_taper=None,s1=None,**kwargs):
     def struct():
@@ -996,8 +989,8 @@ def CPW_wiggles(chip,structure,length=None,nTurns=None,maxWidth=None,CCW=True,st
     params = wiggle_calc(chip,structure,length,nTurns,maxWidth,None,start_bend,stop_bend,w,s,radius,**kwargs)
     [nTurns,h,length,maxWidth]=[params[key] for key in ['nTurns','h','length','maxWidth']]
     if (length is None) or (h is None) or (nTurns is None):
-        print('not enough params specified for CPW_wiggles!')
-        return
+        raise ValueError('not enough params specified for CPW_wiggles!')
+        
     if debug:
         chip.add(dxf.rectangle(struct().start,(nTurns*4 + start_bend + stop_bend)*radius,2*h,valign=const.MIDDLE,rotation=struct().direction,layer='FRAME'))
         chip.add(dxf.rectangle(struct().start,(nTurns*4 + start_bend + stop_bend)*radius,2*maxWidth,valign=const.MIDDLE,rotation=struct().direction,layer='FRAME'))
@@ -1027,6 +1020,42 @@ def CPW_wiggles(chip,structure,length=None,nTurns=None,maxWidth=None,CCW=True,st
         CPW_bend(chip,structure,angle=90,CCW=not CCW,w=w,s=s,radius=radius,bgcolor=bgcolor,**kwargs)
     else:
         CPW_straight(chip,structure,radius,w=w,s=s,bgcolor=bgcolor,**kwargs)
+
+def CPW_bus(chip,structure,length=None,nTurns=None,CCW=True,w=None,s=None,radius=None,bgcolor=None,**kwargs):
+    """
+    Draws the bus resonator's wiggle part.
+        length = length of the bus resonator.
+        nTurns = number of turns.
+        CCW = are the turns CCW?
+        w = width of CPW.
+        s = gap of CPW.
+        radius = radius of turns.
+    """
+    if radius is None:
+        try:
+            radius = structure.defaults['radius']
+        except KeyError:
+            print('\x1b[33mradius not defined in ',chip.chipID,'!\x1b[0m')
+            return
+
+    num_180_turns = 2 * nTurns - 1
+    total_turn_length = np.pi * radius * num_180_turns
+    length_left = length - total_turn_length
+
+    straight_seg = length_left/num_180_turns
+
+    # first bend
+    CPW_straight(chip,structure,straight_seg/2,w=w,s=s,bgcolor=bgcolor,**kwargs)
+    CPW_bend(chip,structure,angle=180,CCW=CCW,w=w,s=s,radius=radius,bgcolor=bgcolor,**kwargs)
+
+    for n in range(nTurns-1):
+        CPW_straight(chip,structure,straight_seg,w=w,s=s,bgcolor=bgcolor,**kwargs)
+        CPW_bend(chip,structure,angle=180,CCW=not CCW,w=w,s=s,radius=radius,bgcolor=bgcolor,**kwargs)
+        CPW_straight(chip,structure,straight_seg,w=w,s=s,bgcolor=bgcolor,**kwargs)
+        CPW_bend(chip,structure,angle=180,CCW=CCW,w=w,s=s,radius=radius,bgcolor=bgcolor,**kwargs)
+
+    # last segment
+    CPW_straight(chip,structure,straight_seg/2,w=w,s=s,bgcolor=bgcolor,**kwargs)
 
 def Strip_wiggles(chip,structure,length=None,nTurns=None,maxWidth=None,CCW=True,start_bend = True,stop_bend=True,w=None,radius=None,bgcolor=None,**kwargs):
     def struct():
