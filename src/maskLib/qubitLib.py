@@ -1,10 +1,17 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+
+"""
+Last updated Aug 7 2024 by Jaein Han.
+- Added Rectanglemon qubit.
+"""
+
 """
 Created on Fri Apr 24 14:48:45 2020
 
 @author: sasha
 """
+#from os import wait4
 import numpy as np
 import maskLib.MaskLib as m
 from dxfwrite import DXFEngine as dxf
@@ -13,7 +20,7 @@ from dxfwrite.vector2d import midpoint, vadd, vsub, distance
 
 #import maskLib.junctionLib as j
 from maskLib.Entities import RoundRect, InsideCurve, CurveRect, Star
-from maskLib.microwaveLib import CPW_stub_open, CPW_straight, Strip_straight, Strip_bend, Strip_taper, CPW_launcher, CPW_taper, Strip_stub_open
+from maskLib.microwaveLib import CPW_stub_open, CPW_stub_round, CPW_straight, Strip_straight, Strip_bend, Strip_taper, CPW_launcher, CPW_taper, Strip_stub_open
 from maskLib.junctionLib import DolanJunction, JContact_tab, ManhattanJunction, JcalcTabDims, JContact_slot, JContact_tab, JSingleProbePad, JProbePads
 
 from maskLib.utilities import kwargStrip
@@ -111,7 +118,6 @@ def TransmonPad(chip,pos,padwidth=250,padheight=None,padradius=25,tab=False,tabS
                 chip.add(dxf.rectangle(struct().start,padwidth-tablength,2*tabhwidth,valign=const.MIDDLE,rotation=struct().direction,bgcolor=bgcolor,**kwargStrip(kwargs)))
 
 
-
 def Transmon3D(chip,pos,rotation=0,bgcolor=None,padh=200,padh2=200,padw=3000,padw2=3000,
                taperw=0,taperw2=0,leadw=85,leadw2=85,leadh=20,leadh2=20,separation=20,
                r_out=0.75,r_ins=0.75,taboffs=-0.05,steml=1.5,gapl=1.5,tabl=2,stemw=3,gapw=3,tabw=0.5,
@@ -163,6 +169,29 @@ def Transmon3D(chip,pos,rotation=0,bgcolor=None,padh=200,padh2=200,padw=3000,pad
 # ===============================================================================
 # Planar (2D) qubit functions (composite entities)
 # ===============================================================================
+
+def Rectanglemon(chip, structure, length, width, s=None,r_out = None, r_ins = None, jj_reverse=False, junctionClass=DolanJunction, **kwargs):
+    """
+    Generates a rectangular shaped qubit.
+    """
+    if s is None:
+        try:
+            s = structure.defaults['s']
+        except KeyError:
+            print('\x1b[33ms not defined in ',chip.chipID,'!\x1b[0m')
+    #top corner rounding if needed
+    
+    CPW_stub_open(chip, structure, length=3, w=width, s=s, r_out=r_out, r_ins=r_ins, flipped=True, extra_straight_section=False)
+    # lines on the side
+    CPW_straight(chip, structure, length, width, s)
+    # bottom horizontal line
+    CPW_stub_open(chip, structure, length=s, w=width, s=s, r_out = r_out, r_ins=r_ins, extra_straight_section=False)
+
+    junctionl = s
+    # JContact_tab(chip, structure.cloneAlong(distance=-junctionl, newDirection=180), **kwargs)
+    junctionClass(chip,structure.cloneAlong(distance=-junctionl/2), junctionl=junctionl, backward=jj_reverse, separation=junctionl,**kwargs)
+    # JContact_tab(chip, structure, **kwargs)
+
 
 def Hamburgermon(chip,pos,rotation=0,
                    qwidth=1120,qheight=795,qr_out=200, minQbunToGnd=100,
